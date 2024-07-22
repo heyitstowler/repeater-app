@@ -1,26 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { PropsWithChildren, useEffect, useState } from 'react';
 import {
     Button,
-    EditorToolbarButton,
     Table,
     TableBody,
     TableRow,
     TableCell,
-    TextField,
-} from '@contentful/forma-36-react-components';
+    Text,
+    Card,
+    Subheading,
+    Flex,
+    Stack,
+} from '@contentful/f36-components';
 import tokens from '@contentful/forma-36-tokens';
-import { FieldExtensionSDK } from '@contentful/app-sdk';
+import { FieldAPI, FieldExtensionSDK } from '@contentful/app-sdk';
 import { v4 as uuid } from 'uuid';
+import { TagsEditor } from '@contentful/field-editor-tags';
+import { DeleteIcon, PlusCircleIcon } from '@contentful/f36-icons';
+import { SingleLineEditor } from '@contentful/field-editor-single-line';
+import { GlobalStyles } from '@contentful/f36-components';
 
 interface FieldProps {
     sdk: FieldExtensionSDK;
 }
 
+interface EnhancedRepeaterField {
+    items: Item[];
+    args: string[];
+}
+
 /** An Item which represents an list item of the repeater app */
-interface Item {
+type Item = {
     id: string;
-    key: string;
-    value: string;
+    data: Record<string, string>;
 }
 
 /** A simple utility function to create a 'blank' item
@@ -29,9 +40,27 @@ interface Item {
 function createItem(): Item {
     return {
         id: uuid(),
-        key: '',
-        value: '',
+        data: {},
     };
+}
+
+const HideCharacterCount = ({ children }: PropsWithChildren) => (
+    <div style={{ maxHeight: '2.51rem', overflow: 'hidden'}}>
+        <div style={{ transform: 'translateY(-0rem)'}}>
+            {children}
+        </div>
+    </div>
+)
+
+const getStubbedFieldSDK = (fieldSDK: FieldAPI, options: Partial<FieldAPI>): FieldAPI => {
+    return {
+        ...fieldSDK,
+        ...options,
+        onSchemaErrorsChanged: () => () => {},
+        onIsDisabledChanged: () => () => {},
+        getIsDisabled: () => false,
+        getSchemaErrors: () => [],
+    } as FieldAPI
 }
 
 /** The Field component is the Repeater App which shows up 
@@ -40,48 +69,167 @@ function createItem(): Item {
  * The Field expects and uses a `Contentful JSON field`
  */
 const Field = (props: FieldProps) => {
-    const { valueName = 'Value' } = props.sdk.parameters.instance as any;
+    console.log('value', props.sdk.field.getValue())
     const [items, setItems] = useState<Item[]>([]);
+    const [args, setArgs] = useState<string[]>([]);
+
 
     useEffect(() => {
         // This ensures our app has enough space to render
         props.sdk.window.startAutoResizer();
 
         // Every time we change the value on the field, we update internal state
-        props.sdk.field.onValueChanged((value: Item[]) => {
-            if (Array.isArray(value)) {
-                setItems(value);
-            }
+        const unsubscribe = props.sdk.field.onValueChanged((value: EnhancedRepeaterField | undefined) => {
+            console.log('onchange', {value})
+            if (!value) return;
+            setItems(value.items);
+            setArgs(value.args);
         });
+        return () => {
+            unsubscribe()
+        }
     });
 
+    const getCurrentFieldState = (): EnhancedRepeaterField => ({
+        items,
+        args,
+    })
+
+    const setFieldValue = (args: Partial<EnhancedRepeaterField>) => {
+        const currentFieldState = getCurrentFieldState();
+        const newValue = { ...currentFieldState, ...args }
+        console.log({ newValue })
+        return props.sdk.field.setValue(newValue);
+    }
+    
     /** Adds another item to the list */
     const addNewItem = () => {
-        props.sdk.field.setValue([...items, createItem()]);
+        setFieldValue({ items: [...items, createItem()] });
     };
 
-    /** Creates an `onChange` handler for an item based on its `property`
-     * @returns A function which takes an `onChange` event 
-    */
-    const createOnChangeHandler = (item: Item, property: 'key' | 'value') => (
-        e: React.ChangeEvent<HTMLInputElement>
-    ) => {
+    const setArgsValue = (newArgs: string[]) => {
+        console.log('setting newArgs! ', args)
+        if (newArgs.length < args.length) {
+            const deletedArg = args.find(arg => !newArgs.includes(arg))
+            console.log({ deletedArg})
+            if (deletedArg) {
+                return setFieldValue({
+                    args: newArgs,
+                    items: items.map(item => {
+                        delete item.data[deletedArg]
+                        return item
+                    })
+                })
+            }
+        }
+        return setFieldValue({ args: newArgs });
+    }
+
+    const createSetDataValue = (item: Item, property: string) => (value: string) => {
         const itemList = items.concat();
         const index = itemList.findIndex((i) => i.id === item.id);
 
-        itemList.splice(index, 1, { ...item, [property]: e.target.value });
+        itemList.splice(index, 1, { ...item, data: {
+                ...item.data,
+                [property]: value,
+            }
+        });
 
-        props.sdk.field.setValue(itemList);
-    };
+        return setFieldValue({ items: itemList });
+    }
 
     /** Deletes an item from the list */
     const deleteItem = (item: Item) => {
-        props.sdk.field.setValue(items.filter((i) => i.id !== item.id));
+        setFieldValue({ items: items.filter((i) => i.id !== item.id) });
     };
 
+    const stubbedArgsFieldSdk = getStubbedFieldSDK(props.sdk.field, {
+        ...props.sdk.field,
+        id: props.sdk.field.id + '.args',
+        name: props.sdk.field.name + ' Arguments',
+        getValue: () => props.sdk.field.getValue()?.args ?? [],
+        setValue: (value: any) => setArgsValue(value as string[]),
+        validations: [],
+        removeValue: () => {
+            setArgsValue([])
+            return Promise.resolve()
+        },
+        onValueChanged: (callback: (value: any) => void) => () => callback(props.sdk.field.getValue()?.args ?? []),
+    })
     return (
         <div>
-            <Table>
+            <GlobalStyles />
+            <TagsEditor field={stubbedArgsFieldSdk} isInitiallyDisabled={false} />
+            <Subheading>Items</Subheading>
+            <Stack flexDirection="column">
+            {
+                items.map((item: Item, itemIdx) => (
+                    <Card key={item.id}>
+                        <Flex flexDirection='row' justifyContent='space-between' alignItems='center' marginBottom="spacingS">
+                            <Subheading marginBottom='none'>
+                                Item {itemIdx + 1}
+                            </Subheading>
+                            <Button
+                                variant="negative"
+                                startIcon={<DeleteIcon />}
+                                onClick={() => deleteItem(item)}
+                                >
+                                
+                                Delete Item
+                            </Button>
+                        </Flex>
+                        <Table layout='inline'>
+                            <TableBody>
+                                {
+                                    args.map((arg, argIdx) => {
+                                        const setDataValue = createSetDataValue(item, arg)
+                                        const getValue = () => props.sdk.field.getValue()?.items?.[itemIdx]?.data[arg] || ''
+                                        
+                                        return (
+                                            <TableRow key={arg + argIdx}>
+                                                <TableCell>
+                                                    <Text fontWeight="fontWeightDemiBold" as="p" style={{ verticalAlign: 'middle', lineHeight: '2rem'}}>
+                                                        {arg}
+                                                    </Text>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <HideCharacterCount>
+                                                        <SingleLineEditor 
+                                                            isInitiallyDisabled={false}
+                                                            withCharValidation={false}
+                                                            locales={props.sdk.locales}
+                                                            field={getStubbedFieldSDK(props.sdk.field, {
+                                                                id: `${props.sdk.field.name}.items[${itemIdx}]`,
+                                                                type: 'Symbol',
+                                                                name: `Item ${itemIdx + 1}`,
+                                                                getValue: () => {
+                                                                    const value = getValue()
+                                                                    console.log({value})
+                                                                    return value
+                                                                },
+                                                                setValue: (value: any) => setDataValue(value as string),
+                                                                removeValue: () => {
+                                                                    setDataValue('')
+                                                                    return Promise.resolve()
+                                                                },
+                                                                onValueChanged: (callback: (value: any) => void) => () => callback(getValue()),
+
+                                                            })}
+                                                        />
+                                                    </HideCharacterCount>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })
+                                }
+                            </TableBody>
+                        </Table>
+                    </Card>
+                ))
+            }
+            </Stack>
+            
+            {/* <Table>
                 <TableBody>
                     {items.map((item) => (
                         <TableRow key={item.id}>
@@ -104,20 +252,16 @@ const Field = (props: FieldProps) => {
                                 />
                             </TableCell>
                             <TableCell align="right">
-                                <EditorToolbarButton
-                                    label="delete"
-                                    icon="Delete"
-                                    onClick={() => deleteItem(item)}
-                                />
+                                
                             </TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
-            </Table>
+            </Table> */}
             <Button
-                buttonType="naked"
+                variant="transparent"
                 onClick={addNewItem}
-                icon="PlusCircle"
+                startIcon={<PlusCircleIcon />}
                 style={{ marginTop: tokens.spacingS }}
             >
                 Add Item
