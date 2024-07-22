@@ -13,15 +13,6 @@ interface DragableItem {
   id: string;
 }
 
-// interface DragProps {
-//   withDragHandle: true;
-//   isDragging: boolean;
-//   // style: React.CSSProperties;
-//   // dragHandleRender: CardProps['dragHandleRender'];
-//   ref: (node: HTMLElement | null) => void;
-// }
-
-// type RenderItemFn = (item: DragableItem) => JSX.Element;
 
 type SortableCardListProps<T extends DragableItem> = {
   onSortEnd: (result: T[]) => void;
