@@ -6,10 +6,9 @@ import {
     TableRow,
     TableCell,
     Text,
-    Card,
     Subheading,
     Flex,
-    Stack,
+    Box,
 } from '@contentful/f36-components';
 import tokens from '@contentful/forma-36-tokens';
 import { FieldAPI, FieldExtensionSDK } from '@contentful/app-sdk';
@@ -18,6 +17,7 @@ import { TagsEditor } from '@contentful/field-editor-tags';
 import { DeleteIcon, PlusCircleIcon } from '@contentful/f36-icons';
 import { SingleLineEditor } from '@contentful/field-editor-single-line';
 import { GlobalStyles } from '@contentful/f36-components';
+import SortableCardList from './SortableCardList';
 
 interface FieldProps {
     sdk: FieldExtensionSDK;
@@ -63,13 +63,24 @@ const getStubbedFieldSDK = (fieldSDK: FieldAPI, options: Partial<FieldAPI>): Fie
     } as FieldAPI
 }
 
+const createLogger = (enableDebugging: boolean) => {
+    if (enableDebugging) {
+        console.log('[Repeater fields]: Debugging enable!')
+        return (...args: any[]) => console.log('[Repeater fields]: ', ...args)
+    }
+    console.log('[Repeater fields]: Debugging disabled!')
+    return () => {}
+}
+
 /** The Field component is the Repeater App which shows up 
  * in the Contentful field.
  * 
  * The Field expects and uses a `Contentful JSON field`
  */
 const Field = (props: FieldProps) => {
-    console.log('value', props.sdk.field.getValue())
+    const { enableDebugging = false } = props.sdk.parameters.instance as any;
+    const log = createLogger(enableDebugging)
+    log('value', props.sdk.field.getValue())
     const [items, setItems] = useState<Item[]>([]);
     const [args, setArgs] = useState<string[]>([]);
 
@@ -80,7 +91,7 @@ const Field = (props: FieldProps) => {
 
         // Every time we change the value on the field, we update internal state
         const unsubscribe = props.sdk.field.onValueChanged((value: EnhancedRepeaterField | undefined) => {
-            console.log('onchange', {value})
+            log('onchange', {value})
             if (!value) return;
             setItems(value.items);
             setArgs(value.args);
@@ -98,7 +109,7 @@ const Field = (props: FieldProps) => {
     const setFieldValue = (args: Partial<EnhancedRepeaterField>) => {
         const currentFieldState = getCurrentFieldState();
         const newValue = { ...currentFieldState, ...args }
-        console.log({ newValue })
+        log({ newValue })
         return props.sdk.field.setValue(newValue);
     }
     
@@ -107,11 +118,15 @@ const Field = (props: FieldProps) => {
         setFieldValue({ items: [...items, createItem()] });
     };
 
+    const setNewItemOrder = (newItems: Item[]) => {
+        setFieldValue({ items: newItems });
+    }
+
     const setArgsValue = (newArgs: string[]) => {
-        console.log('setting newArgs! ', args)
+        log('setting newArgs! ', args)
         if (newArgs.length < args.length) {
             const deletedArg = args.find(arg => !newArgs.includes(arg))
-            console.log({ deletedArg})
+            log({ deletedArg})
             if (deletedArg) {
                 return setFieldValue({
                     args: newArgs,
@@ -161,103 +176,75 @@ const Field = (props: FieldProps) => {
             <GlobalStyles />
             <TagsEditor field={stubbedArgsFieldSdk} isInitiallyDisabled={false} />
             <Subheading>Items</Subheading>
-            <Stack flexDirection="column">
+            <SortableCardList<Item> items={items} onSortEnd={setNewItemOrder}>
             {
                 items.map((item: Item, itemIdx) => (
-                    <Card key={item.id}>
-                        <Flex flexDirection='row' justifyContent='space-between' alignItems='center' marginBottom="spacingS">
-                            <Subheading marginBottom='none'>
-                                Item {itemIdx + 1}
-                            </Subheading>
-                            <Button
-                                variant="negative"
-                                startIcon={<DeleteIcon />}
-                                onClick={() => deleteItem(item)}
-                                >
-                                
-                                Delete Item
-                            </Button>
-                        </Flex>
-                        <Table layout='inline'>
-                            <TableBody>
-                                {
-                                    args.map((arg, argIdx) => {
-                                        const setDataValue = createSetDataValue(item, arg)
-                                        const getValue = () => props.sdk.field.getValue()?.items?.[itemIdx]?.data[arg] || ''
-                                        
-                                        return (
-                                            <TableRow key={arg + argIdx}>
-                                                <TableCell>
-                                                    <Text fontWeight="fontWeightDemiBold" as="p" style={{ verticalAlign: 'middle', lineHeight: '2rem'}}>
-                                                        {arg}
-                                                    </Text>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <HideCharacterCount>
-                                                        <SingleLineEditor 
-                                                            isInitiallyDisabled={false}
-                                                            withCharValidation={false}
-                                                            locales={props.sdk.locales}
-                                                            field={getStubbedFieldSDK(props.sdk.field, {
-                                                                id: `${props.sdk.field.name}.items[${itemIdx}]`,
-                                                                type: 'Symbol',
-                                                                name: `Item ${itemIdx + 1}`,
-                                                                getValue: () => {
-                                                                    const value = getValue()
-                                                                    console.log({value})
-                                                                    return value
-                                                                },
-                                                                setValue: (value: any) => setDataValue(value as string),
-                                                                removeValue: () => {
-                                                                    setDataValue('')
-                                                                    return Promise.resolve()
-                                                                },
-                                                                onValueChanged: (callback: (value: any) => void) => () => callback(getValue()),
+                    <SortableCardList.Card key={item.id} item={item}>
+                        <Box padding="spacingS">
+                            <Flex flexDirection='row' justifyContent='space-between' alignItems='center' marginBottom="spacingS">
+                                <Subheading marginBottom='none'>
+                                    Item {itemIdx + 1}
+                                </Subheading>
+                                <Button
+                                    variant="negative"
+                                    startIcon={<DeleteIcon />}
+                                    onClick={() => deleteItem(item)}
+                                    >
+                                    
+                                    Delete Item
+                                </Button>
+                            </Flex>
+                            <Table layout='inline' style={{ borderRadius: 0 }}>
+                                <TableBody>
+                                    {
+                                        args.map((arg, argIdx) => {
+                                            const setDataValue = createSetDataValue(item, arg)
+                                            const getValue = () => props.sdk.field.getValue()?.items?.[itemIdx]?.data[arg] || ''
+                                            
+                                            return (
+                                                <TableRow key={arg + argIdx}>
+                                                    <TableCell>
+                                                        <Text fontWeight="fontWeightDemiBold" as="p" style={{ verticalAlign: 'middle', lineHeight: '2rem'}}>
+                                                            {arg}
+                                                        </Text>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <HideCharacterCount>
+                                                            <SingleLineEditor 
+                                                                isInitiallyDisabled={false}
+                                                                withCharValidation={false}
+                                                                locales={props.sdk.locales}
+                                                                field={getStubbedFieldSDK(props.sdk.field, {
+                                                                    id: `${props.sdk.field.name}.items[${itemIdx}]`,
+                                                                    type: 'Symbol',
+                                                                    name: `Item ${itemIdx + 1}`,
+                                                                    getValue: () => {
+                                                                        const value = getValue()
+                                                                        log({value})
+                                                                        return value
+                                                                    },
+                                                                    setValue: (value: any) => setDataValue(value as string),
+                                                                    removeValue: () => {
+                                                                        setDataValue('')
+                                                                        return Promise.resolve()
+                                                                    },
+                                                                    onValueChanged: (callback: (value: any) => void) => () => callback(getValue()),
 
-                                                            })}
-                                                        />
-                                                    </HideCharacterCount>
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })
-                                }
-                            </TableBody>
-                        </Table>
-                    </Card>
+                                                                })}
+                                                            />
+                                                        </HideCharacterCount>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })
+                                    }
+                                </TableBody>
+                            </Table>
+                        </Box>
+                    </SortableCardList.Card>
                 ))
             }
-            </Stack>
-            
-            {/* <Table>
-                <TableBody>
-                    {items.map((item) => (
-                        <TableRow key={item.id}>
-                            <TableCell>
-                                <TextField
-                                    id="key"
-                                    name="key"
-                                    labelText="Item Name"
-                                    value={item.key}
-                                    onChange={createOnChangeHandler(item, 'key')}
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <TextField
-                                    id="value"
-                                    name="value"
-                                    labelText={valueName}
-                                    value={item.value}
-                                    onChange={createOnChangeHandler(item, 'value')}
-                                />
-                            </TableCell>
-                            <TableCell align="right">
-                                
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table> */}
+            </SortableCardList>
             <Button
                 variant="transparent"
                 onClick={addNewItem}
