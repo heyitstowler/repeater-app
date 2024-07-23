@@ -76,9 +76,6 @@ export const RepeaterField = (props: FieldProps) => {
 
 
     useEffect(() => {
-        // This ensures our app has enough space to render
-        props.sdk.window.startAutoResizer();
-
         // Every time we change the value on the field, we update internal state
         const unsubscribe = props.sdk.field.onValueChanged((value: EnhancedRepeaterField | undefined) => {
             log('onchange', {value})

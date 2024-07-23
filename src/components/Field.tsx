@@ -25,7 +25,9 @@ const createLogger = (enableDebugging: boolean) => {
 const Field = ({ sdk }: FieldProps) => {
     const { enableDebugging = false, toggleVisbilityField } = sdk.parameters.instance;
     const [showRepeaterField, setShowRepeaterField] = useState(false);
-
+    useEffect(() => {
+        sdk.window.startAutoResizer();
+    })
     useEffect(() => {
         if (!toggleVisbilityField) {
             setShowRepeaterField(true);
