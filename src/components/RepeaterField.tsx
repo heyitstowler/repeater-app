@@ -72,6 +72,7 @@ export const RepeaterField = (props: FieldProps) => {
     const defaultKeyNames = defaultKeyNamesString ? (defaultKeyNamesString as string).split(',').map(str => str.trim()) : [];
 
     const log = createLogger(enableDebugging)
+    log("instance parameters: ", props.sdk.parameters.instance)
     log('value', props.sdk.field.getValue())
     const [items, setItems] = useState<Item[]>([]);
     const [args, setArgs] = useState<string[]>(defaultKeyNames);
