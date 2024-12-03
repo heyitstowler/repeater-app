@@ -67,12 +67,14 @@ const createLogger = (enableDebugging: boolean) => {
  * The Field expects and uses a `Contentful JSON field`
  */
 export const RepeaterField = (props: FieldProps) => {
-    const { enableDebugging = false } = props.sdk.parameters.instance as any;
+    const { enableDebugging = false, defaultKeyNames: defaultKeyNamesString, allowAdditionalKeyNames } = props.sdk.parameters.instance as any;
+
+    const defaultKeyNames = defaultKeyNamesString ? (defaultKeyNamesString as string).split(',').map(str => str.trim()) : [];
 
     const log = createLogger(enableDebugging)
     log('value', props.sdk.field.getValue())
     const [items, setItems] = useState<Item[]>([]);
-    const [args, setArgs] = useState<string[]>([]);
+    const [args, setArgs] = useState<string[]>(defaultKeyNames);
 
 
     useEffect(() => {
@@ -159,7 +161,7 @@ export const RepeaterField = (props: FieldProps) => {
     })
     return (
         <div>
-            <TagsEditor field={stubbedArgsFieldSdk} isInitiallyDisabled={false} />
+            { allowAdditionalKeyNames && <TagsEditor field={stubbedArgsFieldSdk} isInitiallyDisabled={false} /> }
             <Subheading>Items</Subheading>
             <SortableCardList<Item> items={items} onSortEnd={setNewItemOrder}>
             {

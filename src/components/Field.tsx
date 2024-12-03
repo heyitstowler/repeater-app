@@ -23,7 +23,7 @@ const createLogger = (enableDebugging: boolean) => {
  * The Field expects and uses a `Contentful JSON field`
  */
 const Field = ({ sdk }: FieldProps) => {
-    const { enableDebugging = false, toggleVisbilityField } = sdk.parameters.instance;
+    const { enableDebugging = false, toggleVisbilityField, defaultKeyNames: defaultKeyNamesString } = sdk.parameters.instance;
     const [showRepeaterField, setShowRepeaterField] = useState(false);
     useEffect(() => {
         sdk.window.startAutoResizer();
